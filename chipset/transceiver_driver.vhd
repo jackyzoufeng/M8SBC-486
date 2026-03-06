@@ -50,6 +50,7 @@ BEGIN
 				TR_16B_LOW <= '1';
 				TR_16B_HIGH <= '1';
 				
+
 				IF BE(0) = '0' THEN
 					TR_8B(0) <= '0';
 				ELSE 
@@ -61,12 +62,13 @@ BEGIN
 						ELSE
 							IF BE(3) = '0' THEN
 								TR_8B(3) <= '0';
+							END IF;
 						END IF;
 					END IF;
-				END IF;
-			END IF;
+				END IF; 
+
 					
-         WHEN "10" =>
+			WHEN "10" =>
 				-- BS16 active
 				
 				TR_8B <= "1111";

@@ -13,6 +13,7 @@
 -- Dependencies: 
 --
 -- Revision: 
+-- Revision 0.02 - isa_driver rewrite
 -- Revision 0.01 - File Created
 -- Additional Comments: 
 --
@@ -111,58 +112,58 @@ END m8sbc_main;
 
 
 
-ARCHITECTURE Behavioral of m8sbc_main is
+ARCHITECTURE Behavioral OF m8sbc_main IS
 
 	-- CONSTANTS
 	-- Update Divider in CLKGEN!
 	
-	CONSTANT FPGA_VER						: STD_LOGIC_VECTOR(31 downto 0) := x"48860001"; -- first 2 bytes - chipset ident, last 2 bytes - version
+	CONSTANT FPGA_VER						: STD_LOGIC_VECTOR(31 DOWNTO 0) := x"48860002"; -- first 2 bytes - chipset ident, last 2 bytes - version
 	
 	
 	CONSTANT REVERSE_CLOCK				: STD_LOGIC	:= '0'; -- Use 1 for 12 MHz, for 16> use 0
 	
 --	-- DIV = 4.0 - 12 MHz
---	CONSTANT RAM_WAITSTATES				: INTEGER RANGE 0 to 127 := 0;
--- CONSTANT RAM_BURST_WAITSTATES		: INTEGER RANGE 0 to 15  := 0; -- Read bursts
---	CONSTANT ROM_WAITSTATES				: INTEGER RANGE 0 to 127 := 1;
+--	CONSTANT RAM_WAITSTATES				: INTEGER RANGE 0 TO 127 := 0;
+-- CONSTANT RAM_BURST_WAITSTATES		: INTEGER RANGE 0 TO 15  := 0; -- Read bursts
+--	CONSTANT ROM_WAITSTATES				: INTEGER RANGE 0 TO 127 := 1;
 --		
---	CONSTANT ONBOARD_IO_WAITSTATES	: INTEGER RANGE 0 to 127 := 12;
---	CONSTANT PIC_INT_ACK_WAITSTATES	: INTEGER RANGE 0 to 127 := 12;
+--	CONSTANT ONBOARD_IO_WAITSTATES	: INTEGER RANGE 0 TO 127 := 12;
+--	CONSTANT PIC_INT_ACK_WAITSTATES	: INTEGER RANGE 0 TO 127 := 12;
 --		
---	CONSTANT ISA_WAITSTATES_TOTAL		: INTEGER RANGE 0 to 127 := 19;
---	CONSTANT ISA_CHECK_16_WAITSTATES	: INTEGER RANGE 0 to 127 := 3;	-- Doesn't add waitstates total, works on behalf - 3 cycles out of 19 are used for CS16 check
+--	CONSTANT ISA_CLK_LOW_CYCLES  		: INTEGER RANGE 1 TO 15 := 1; -- 6 MHz
+--	CONSTANT ISA_CLK_HIGH_CYCLES 		: INTEGER RANGE 1 TO 15 := 1; 
 --
 
 
 	-- DIV = 2.5 - 19.2 MHz
---	CONSTANT RAM_WAITSTATES				: INTEGER RANGE 0 to 127 := 1;
--- CONSTANT RAM_BURST_WAITSTATES		: INTEGER RANGE 0 to 15  := 0;
---	CONSTANT ROM_WAITSTATES				: INTEGER RANGE 0 to 127 := 1;
+--	CONSTANT RAM_WAITSTATES				: INTEGER RANGE 0 TO 127 := 1;
+-- CONSTANT RAM_BURST_WAITSTATES		: INTEGER RANGE 0 TO 15  := 0;
+--	CONSTANT ROM_WAITSTATES				: INTEGER RANGE 0 TO 127 := 1;
 --		
---	CONSTANT ONBOARD_IO_WAITSTATES	: INTEGER RANGE 0 to 127 := 19;
---	CONSTANT PIC_INT_ACK_WAITSTATES	: INTEGER RANGE 0 to 127 := 19;
+--	CONSTANT ONBOARD_IO_WAITSTATES	: INTEGER RANGE 0 TO 127 := 19;
+--	CONSTANT PIC_INT_ACK_WAITSTATES	: INTEGER RANGE 0 TO 127 := 19;
 --		
---	CONSTANT ISA_WAITSTATES_TOTAL		: INTEGER RANGE 0 to 127 := 30;
---	CONSTANT ISA_CHECK_16_WAITSTATES	: INTEGER RANGE 0 to 127 := 5;
+--	CONSTANT ISA_CLK_LOW_CYCLES  		: INTEGER RANGE 1 TO 15 := 2; -- 6.4 MHz
+--	CONSTANT ISA_CLK_HIGH_CYCLES 		: INTEGER RANGE 1 TO 15 := 1; 
 
 
 	-- DIV = 2.0 - 24 MHz
-	CONSTANT RAM_WAITSTATES				: INTEGER RANGE 0 to 127 := 1;
-	CONSTANT RAM_BURST_WAITSTATES		: INTEGER RANGE 0 to 15  := 0;
-	CONSTANT ROM_WAITSTATES				: INTEGER RANGE 0 to 127 := 2;
+	CONSTANT RAM_WAITSTATES				: INTEGER RANGE 0 TO 127 := 1;
+	CONSTANT RAM_BURST_WAITSTATES		: INTEGER RANGE 0 TO 15  := 0;
+	CONSTANT ROM_WAITSTATES				: INTEGER RANGE 0 TO 127 := 2;
 		
-	CONSTANT ONBOARD_IO_WAITSTATES	: INTEGER RANGE 0 to 127 := 23;
-	CONSTANT PIC_INT_ACK_WAITSTATES	: INTEGER RANGE 0 to 127 := 23;
+	CONSTANT ONBOARD_IO_WAITSTATES	: INTEGER RANGE 0 TO 127 := 23;
+	CONSTANT PIC_INT_ACK_WAITSTATES	: INTEGER RANGE 0 TO 127 := 23;
 		
-	CONSTANT ISA_WAITSTATES_TOTAL		: INTEGER RANGE 0 to 127 := 38; -- should be 39, but what about tiny overclock?
-	CONSTANT ISA_CHECK_16_WAITSTATES	: INTEGER RANGE 0 to 127 := 6; -- should be 7
+	CONSTANT ISA_CLK_LOW_CYCLES  		: INTEGER RANGE 1 TO 15 := 2; -- 8 MHz
+	CONSTANT ISA_CLK_HIGH_CYCLES 		: INTEGER RANGE 1 TO 15 := 1; 
 
 
 	-- COMPONENTS
 	COMPONENT clock_section IS
 		PORT (
-			CLK_INPUT   : in  std_logic;  -- 48 MHz
-			CPU_CLK_OUT : out std_logic 
+			CLK_INPUT   : IN  std_logic;  -- 48 MHz
+			CPU_CLK_OUT : OUT std_logic 
 		);
 	END COMPONENT;
 	
@@ -173,19 +174,11 @@ ARCHITECTURE Behavioral of m8sbc_main is
 		);
 	END COMPONENT;
 	
-	COMPONENT clock_section_isa IS
-		PORT (
-			CLK_INPUT	: IN  STD_LOGIC;  -- 14.318 MHz in
-			CLK_OUT		: OUT STD_LOGIC   -- 7.159 MHz out
-		);
-	END COMPONENT;
-
-	
 	COMPONENT ram_driver IS
 		PORT ( 
 			CLK				: IN		STD_LOGIC;
 			RESET				: IN		STD_LOGIC;
-			BE			 		: IN		STD_LOGIC_VECTOR(3 downto 0);
+			BE			 		: IN		STD_LOGIC_VECTOR(3 DOWNTO 0);
 			ADS				: IN		STD_LOGIC; -- Active LOW
 			CPU_RW			: IN		STD_LOGIC; -- Inverted in x86!  0 - read, 1 - write
 			RAMCS				: IN		STD_LOGIC; -- Active LOW
@@ -194,21 +187,21 @@ ARCHITECTURE Behavioral of m8sbc_main is
 			CS0				: OUT		STD_LOGIC;
 			CS1				: OUT		STD_LOGIC;
 			RDY				: OUT		STD_LOGIC;
-			WE					: OUT		STD_LOGIC_VECTOR(3 downto 0); -- For each bytes
-			OE					: OUT		STD_LOGIC_VECTOR(3 downto 0);
+			WE					: OUT		STD_LOGIC_VECTOR(3 DOWNTO 0); -- For each bytes
+			OE					: OUT		STD_LOGIC_VECTOR(3 DOWNTO 0);
 			
-			RAM_WAITSTATES	: IN		INTEGER RANGE 0 to 127;
-			RAM_BURST_WAITSTATES : IN INTEGER RANGE 0 to 15
+			RAM_WAITSTATES	: IN		INTEGER RANGE 0 TO 127;
+			RAM_BURST_WAITSTATES : IN INTEGER RANGE 0 TO 15
 		);
 	END COMPONENT;
 	
 	COMPONENT transceiver_driver IS
 	PORT (
-		BE			 		: IN		STD_LOGIC_VECTOR(3 downto 0);
+		BE			 		: IN		STD_LOGIC_VECTOR(3 DOWNTO 0);
 		BS8				: IN		STD_LOGIC;
 		BS16				: IN		STD_LOGIC;
 		
-		TR_8B				: OUT		STD_LOGIC_VECTOR( 3 downto  0);
+		TR_8B				: OUT		STD_LOGIC_VECTOR( 3 DOWNTO  0);
 		TR_16B_LOW		: OUT		STD_LOGIC;
 		TR_16B_HIGH		: OUT		STD_LOGIC
     );
@@ -285,6 +278,8 @@ ARCHITECTURE Behavioral of m8sbc_main is
 			MIO				: IN	STD_LOGIC;
 			EN_ISA			: IN  STD_LOGIC; -- negated
 			
+			ISA_CLK_HIGH_CYCLES : IN INTEGER RANGE 1 TO 15; -- ISA clock divisor from main clock
+			ISA_CLK_LOW_CYCLES  : IN INTEGER RANGE 1 TO 15; 
 			WAITSTATE_16C	: IN	INTEGER RANGE 0 to 15; -- From ADS to check 16B signals
 			WAITSTATE_END	: IN  INTEGER RANGE 0 to 127; -- From check to end of transfer
 			
@@ -297,6 +292,7 @@ ARCHITECTURE Behavioral of m8sbc_main is
 			ISA_MEM_RD		: OUT	STD_LOGIC;
 			ISA_IO_WR		: OUT	STD_LOGIC;
 			ISA_IO_RD		: OUT	STD_LOGIC;
+			ISA_CLK			: OUT STD_LOGIC;
 			
 			BS8_O				: OUT	STD_LOGIC;
 			BS16_O			: OUT	STD_LOGIC;
@@ -414,7 +410,7 @@ ARCHITECTURE Behavioral of m8sbc_main is
 	SIGNAL	CPU_O_KEN		: STD_LOGIC;
 	
 	SIGNAL	O_CPU_16BTR		: STD_LOGIC;
-	
+
 BEGIN
 	-----------------------------------------
 	---- BEGIN                           ----
@@ -434,11 +430,6 @@ BEGIN
 	CLKGEN_PIT: clock_section_pit PORT MAP(
 		CLK_INPUT		=> CLK_14M_BUF,
 		CLK_OUT			=> CLK_PIT
-	);
-	
-	CLKGEN_ISA: clock_section_isa PORT MAP(
-		CLK_INPUT		=> CLK_14M_BUF,
-		CLK_OUT			=> CLK_ISA
 	);
 	
 	RAMDRV: ram_driver PORT MAP(
@@ -533,6 +524,8 @@ BEGIN
 		MIO				=> CPU_IN_MIO,
 		EN_ISA			=> S_ISA_EN, -- from ADDR decoder
 		
+		ISA_CLK_HIGH_CYCLES => ISA_CLK_HIGH_CYCLES,
+		ISA_CLK_LOW_CYCLES  => ISA_CLK_LOW_CYCLES,
 		WAITSTATE_16C	=> S_WAITSTATES_ISA16,
 		WAITSTATE_END	=> S_WAITSTATES,
 		
@@ -545,6 +538,7 @@ BEGIN
 		ISA_MEM_RD		=> ISA_MEM_RD_P,
 		ISA_IO_WR		=> MUX_ISA_IO_WR,
 		ISA_IO_RD		=> MUX_ISA_IO_RD,
+		ISA_CLK			=> CLK_ISA,
 		
 		BS8_O				=> ISA_BS8,
 		BS16_O			=> ISA_BS16,
@@ -554,7 +548,7 @@ BEGIN
 	);
 	
 	KBCTRL: keyboard_controller PORT MAP(
-		CLK			=> CLK_PIT, -- 1.1 MHz
+		CLK			=> CLK_PIT, -- 1.1 MHz, used for transfer timeout
 		PS2_CLK		=> PS2_CLK,
 		PS2_DATA		=> PS2_DATA,
 		RESET			=> RESET_SYS_IN,
@@ -568,7 +562,7 @@ BEGIN
 		INT_OUT		=> O_PS2_INT
 	);
 	
-	cmos_rtc: CMOS PORT  MAP(
+	cmos_rtc: CMOS PORT MAP(
 		CLK_IN	=> CLK_CPU,
 		DATA_IN	=> CPU_DATA,
 		DATA_OUT	=> O_CMOS_DATA_OUT,
@@ -614,7 +608,7 @@ BEGIN
 	
 	-- WR/RD gen activator and WAITSTATE selector
 	PROCESS(I_CS_ROM, I_CS_PIC, I_CS_PIT, I_CS_O61, I_CS_ISA, I_INT_ACK)
-		VARIABLE SEL_BUS	: STD_LOGIC_VECTOR(3 downto 0);
+		VARIABLE SEL_BUS	: STD_LOGIC_VECTOR(3 DOWNTO 0);
 	BEGIN
 	
 		-- INTA cycle is basically:
@@ -645,10 +639,7 @@ BEGIN
 				
 				S_EN <= '1'; -- activate isa
 				S_ISA_EN <= '0';
-				
-				S_WAITSTATES <= ISA_WAITSTATES_TOTAL; 
-				S_WAITSTATES_ISA16 <= ISA_CHECK_16_WAITSTATES;
-			
+
 			WHEN "1110" => -- PIC INTA (because I_CS_ISA will be low on INTA addr)
 				S_EN <= '0';
 				S_WAITSTATES <= PIC_INT_ACK_WAITSTATES;
@@ -670,7 +661,8 @@ BEGIN
 	PIT_CS	<= I_CS_PIT;
 	
 	
-	PROCESS(O_IO_RD, CPU_IN_WR, I_CS_PS2, I_CS_O61, I_CS_CMOS, CPU_IN_ADDR, O_PS2_STATUS, O_PS2_DATA, O61_DATA_L, O_CMOS_DATA_OUT) -- Output from the FPGA to the CPU driver (Data)
+	-- Output from the FPGA to the CPU data bus driver
+	PROCESS(O_IO_RD, CPU_IN_WR, I_CS_PS2, I_CS_O61, I_CS_CMOS, CPU_IN_ADDR, O_PS2_STATUS, O_PS2_DATA, O61_DATA_L, O_CMOS_DATA_OUT) 
 	BEGIN
 		O_CPU_DATA <= "ZZZZZZZZ";
 		O_CPU_DATA_P_O <= '0';
@@ -747,14 +739,14 @@ BEGIN
 	
 	-- For some reason I inverted RDY behaviour on the generators before. 1 - is WAIT, 0 is READY !!!!!!
 	-- ISA_IO_READY is 0 = wait
-	CPU_OUT_RDY		<= O_RDY_ISA OR O_RDY_RAM OR O_RDY_WRRD; -- TEMP (???)
+	CPU_OUT_RDY		<= O_RDY_ISA OR O_RDY_RAM OR O_RDY_WRRD;
 
 	
 	RESET_REQ_OUT	<= '1'; -- active LOW
 	CPU_OUT_NMI		<= '0';
 	PIC_INTA			<= O_IO_RD WHEN I_INT_ACK = '0' ELSE '1'; -- Int ack for 8259 is like RD. 486 holds INTA state both reads so we need to use IO_RD feature
 
-	CPU_OUT_KEN		<= CPU_O_KEN WHEN TRUE ELSE '1'; -- To fix: doesn't work on RAM
+	CPU_OUT_KEN		<= CPU_O_KEN; -- To fix: doesn't work on ROM
 	
-end Behavioral;
+END Behavioral;
 
