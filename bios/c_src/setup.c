@@ -122,6 +122,8 @@ static void bios_redraw() {
     vga_print_string("System info", 1, 2, 0x78);
     vga_print_string("Settings", 1, 10, 0x78);
     
+    vga_print_string(" " VERSION " ", 80 - sizeof(" " VERSION " "), 23, 0x78);
+    
 
     vga_print_string("Machine", 3, 4, 0x71);
     vga_print_string("CPU Model", 3, 5, 0x71);
@@ -137,10 +139,8 @@ static void bios_redraw() {
 
     if(l_is_m8sbc) {
         vga_print_string("M8SBC-486, chipset ver: ", 35, 4, 0x71);
-        itoa(l_chp_version, print_buffer, 16);
-        vga_print_string("0000", 59, 4, 0x71);
-        int xpos = 59+4-strlen(print_buffer);
-        vga_print_string(print_buffer, xpos, 4, 0x71);
+        itoapad(l_chp_version, print_buffer, 16, 4);
+        vga_print_string(print_buffer, 59, 4, 0x71);
     } else {
         vga_print_string("Unknown", 35, 4, 0x71);
     }
